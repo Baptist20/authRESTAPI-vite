@@ -1,6 +1,5 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 const sendEmail = require("../utils/sendEmail");
 
 const createToken = (userId, res) => {
@@ -58,21 +57,20 @@ const forgotPassword = async (req, res) => {
 
   if (!user) return res.status(404).json({ message: "User not found" });
 
-  const token = crypto.randomBytes(32).toString("hex");
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
 
-  user.resetToken = token;
-  user.resetTokenExpiry = Date.now() + 3600000; // 1 hour from now
+  user.resetCode = code;
+  user.resetCodeExpiry = Date.now() + 3600000; // 1 hour from now
 
   console.log("User with reset token:", user); // Debug log to check the user before saving
 
   try {
     await user.save();
-    const resetLink = `${process.env.CLIENT_URL}/resetPassword/${token}`;
-    const message = `<p>Click <a href="${resetLink}">here</a> to reset your password. This link expires in 1 hour.</p>`;
+    const message = `<p>Use this code to reset your password: <strong>${code}</strong>. This code expires in 1 hour.</p>`;
 
     await sendEmail(user.email, "Password Reset", message);
 
-    res.json({ message: "A reset link has been sent to your email" });
+    res.json({ message: "A reset code has been sent to your email" });
   } catch (err) {
     console.error("Error saving user:", err);
     res.status(500).json({ message: "Something went wrong, please try again" });
@@ -80,20 +78,20 @@ const forgotPassword = async (req, res) => {
 };
 
 const resetPassword = async (req, res) => {
-  const { token } = req.params;
-  const { newPassword } = req.body;
+  const { email, code, newPassword } = req.body;
 
   const user = await User.findOne({
-    resetToken: token,
-    resetTokenExpiry: { $gt: Date.now() }, // Check if the token is still valid
+    email,
+    resetCode: code,
+    resetCodeExpiry: { $gt: Date.now() }, // Check if the token is still valid
   });
 
   if (!user)
     return res.status(400).json({ message: "Invalid or expired token" });
 
   user.password = newPassword;
-  user.resetToken = undefined;
-  user.resetTokenExpiry = undefined;
+  user.resetCode = undefined;
+  user.resetCodeExpiry = undefined;
 
   console.log("User before saving:", user); // Debug log before saving the user
 
